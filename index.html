@@ -623,6 +623,36 @@ function renderFilters(){
 /* ── Chart infra ── */
 function dc(id){if(ch[id]){ch[id].destroy();delete ch[id]}}
 const cO={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{backgroundColor:'#1a2030',borderColor:'#222a3a',borderWidth:1,titleFont:{family:'DM Sans'},bodyFont:{family:'JetBrains Mono',size:11},padding:10,cornerRadius:8}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a8499',font:{family:'DM Sans',size:10}}},y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#7a8499',font:{family:'DM Sans',size:10}}}}};
+/* Value labels: draws data numbers on bars, line points and doughnut slices */
+const valueLabels={id:'valueLabels',afterDatasetsDraw(chart){
+  const {ctx}=chart,isStack=!!(chart.options.scales&&((chart.options.scales.x||{}).stacked||(chart.options.scales.y||{}).stacked));
+  const fmt=v=>Number.isInteger(v)?String(v):String(+(+v).toFixed(2));
+  ctx.save();ctx.font="600 10px 'JetBrains Mono', monospace";
+  chart.data.datasets.forEach((ds,i)=>{
+    if(!chart.isDatasetVisible(i))return;
+    const meta=chart.getDatasetMeta(i),type=meta.type,suf=ds.valueSuffix||'';
+    if(type==='line'&&!(ds.pointRadius>0))return; /* skip avg/target reference lines */
+    meta.data.forEach((el,j)=>{
+      const v=ds.data[j];if(v==null||v===0||isNaN(v))return;
+      const txt=fmt(v)+suf;
+      if(type==='doughnut'||type==='pie'){
+        if(!chart.getDataVisibility(j)||el.circumference<0.3)return;
+        const p=el.tooltipPosition();ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,p.x,p.y);
+      }else if(type==='bar'){
+        ctx.fillStyle=isStack?'#fff':'#e4e8ef';
+        if(isStack){ctx.textAlign='center';ctx.textBaseline='middle';const c=el.getCenterPoint();if(Math.abs((el.horizontal?el.x-el.base:el.base-el.y))<12)return;ctx.fillText(txt,c.x,c.y);}
+        else if(el.horizontal){ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(txt,el.x+4,el.y);}
+        else{ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(txt,el.x,el.y-3);}
+      }else if(type==='line'){
+        if(j>0&&ds.data[j-1]===v)return; /* skip repeats on flat segments */
+        ctx.fillStyle=ds.borderColor||'#e4e8ef';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(txt,el.x,el.y-6);
+      }
+    });
+  });
+  ctx.restore();
+}};
+Chart.register(valueLabels);
+cO.layout={padding:{top:18,right:28}};
 const dO={responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{color:'#7a8499',font:{family:'DM Sans',size:10},padding:8,boxWidth:10}},tooltip:cO.plugins.tooltip}};
 function trunc(s,n){return s&&s.length>n?s.substring(0,n-1)+'…':s}
 
@@ -723,7 +753,7 @@ function renderParetoChart(){
   let cum=0;const cumP=values.map(v=>{cum+=v;return Math.round(cum/total*100)});
   ch.pareto=new Chart(document.getElementById('chPareto'),{type:'bar',data:{labels,datasets:[
     {type:'bar',data:values,backgroundColor:PAL.slice(0,sorted.length),borderRadius:6,borderSkipped:false,barPercentage:.6},
-    {type:'line',data:cumP,borderColor:'#e4e8ef',borderWidth:2,pointRadius:3,pointBackgroundColor:'#e4e8ef',tension:.3,yAxisID:'y1'}
+    {type:'line',data:cumP,valueSuffix:'%',borderColor:'#e4e8ef',borderWidth:2,pointRadius:3,pointBackgroundColor:'#e4e8ef',tension:.3,yAxisID:'y1'}
   ]},options:{...cO,scales:{...cO.scales,x:{...cO.scales.x,ticks:{maxRotation:45,minRotation:20,font:{size:9}}},y:{...cO.scales.y,beginAtZero:true,ticks:{...cO.scales.y.ticks,stepSize:1}},y1:{position:'right',grid:{display:false},ticks:{color:'#e4e8ef',font:{size:9},callback:v=>v+'%'},min:0,max:100}}}});
 }
 
